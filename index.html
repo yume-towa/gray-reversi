@@ -166,6 +166,9 @@ body.gaming .meter i{
   background:linear-gradient(90deg,#ff004c,#ff8a00,#ffe600,#2bff5a,#00d5ff,#4b5bff,#c03bff,#ff004c);
   background-size:200% 100%; animation:slide 2s linear infinite;
 }
+/* 暗い背景に黒の手番印が溶けないよう、黒石と同じ縁取りとツヤを付ける */
+body.gaming .chip{border-color:rgba(255,255,255,.55)}
+body.gaming .chip.b{background-image:radial-gradient(circle at 35% 30%, rgba(255,255,255,.28), transparent 55%)}
 body.gaming .result{border-color:var(--accent)}
 body.gaming .primary{box-shadow:0 0 14px rgba(255,43,214,.45)}
 @media (prefers-reduced-motion:reduce){
@@ -374,8 +377,10 @@ body.gaming .primary{box-shadow:0 0 14px rgba(255,43,214,.45)}
       c.classList.toggle('last', i===last && !over);
       c.classList.toggle('hint', hints.includes(i));
     });
-    $('chip').className = 'chip ' + (turn===1?'b':'w');
+    // 終局後は手番の印を出さない(最後の手番の色が残ると勝者と紛らわしい)
+    $('chip').className = 'chip ' + (over ? 'hidden' : (turn===1?'b':'w'));
     $('turnText').textContent = over ? '終局' : `${NAME[turn]}の番`;
+    $('reveal').classList.toggle('hidden', over); // 終局後の答え合わせは押しても意味がないので隠す
     $('count').innerHTML = over ? `全${moves}手` : `${moves+1}手目<br>石の数は終局まで秘密`;
     $('foulText').textContent = (fouls[1]||fouls[2]) ? `お手つき 黒${fouls[1]}・白${fouls[2]}` : '';
     paint();
