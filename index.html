@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>灰色リバーシ</title>
+<link href="https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@500;700&family=DotGothic16&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#efe9dc; --ink:#22201c; --sub:#6b655a; --line:#cfc6b3;
+  --board:#3f5a45; --grid:#2c4032; --accent:#a8412f;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+button{touch-action:manipulation}
+html,body{margin:0}
+body{
+  background:var(--paper); color:var(--ink);
+  font-family:"Shippori Mincho","Hiragino Mincho ProN","Yu Mincho",serif;
+  min-height:100vh; display:flex; justify-content:center;
+}
+main{width:100%; max-width:520px; padding:20px 16px 40px}
+h1{font-size:28px; margin:4px 0 2px; letter-spacing:.12em; text-align:center}
+.lead{text-align:center; color:var(--sub); font-size:14px; margin:0 0 20px; line-height:1.7}
+.hidden{display:none !important}
+
+/* 設定 */
+.group{margin:0 0 18px}
+.group h2{font-size:14px; margin:0 0 8px; color:var(--sub); font-weight:500; letter-spacing:.08em}
+.seg{display:flex; border:1px solid var(--ink); border-radius:6px; overflow:hidden}
+.seg button{
+  flex:1; padding:12px 4px; font:inherit; font-size:15px; background:transparent; color:var(--ink);
+  border:0; border-left:1px solid var(--ink); cursor:pointer;
+}
+.seg button:first-child{border-left:0}
+.seg button[aria-pressed="true"]{background:var(--ink); color:var(--paper)}
+.primary{
+  width:100%; padding:15px; font:inherit; font-size:18px; letter-spacing:.2em; cursor:pointer;
+  background:var(--ink); color:var(--paper); border:0; border-radius:6px; margin-top:6px;
+}
+.ghost{
+  padding:10px 14px; font:inherit; font-size:14px; background:transparent; color:var(--ink);
+  border:1px solid var(--line); border-radius:6px; cursor:pointer;
+}
+.ghost.armed{border-color:var(--accent); color:var(--accent)}
+
+/* 対局 */
+.status{display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:10px}
+.turn{display:flex; align-items:center; gap:10px; font-size:20px; font-weight:700}
+.chip{width:22px; height:22px; border-radius:50%; border:1px solid rgba(0,0,0,.45)}
+.chip.b{background:#141414} .chip.w{background:#f5f5f2}
+.count{font-size:14px; color:var(--sub); text-align:right; line-height:1.5}
+.meter{height:6px; border-radius:3px; background:linear-gradient(90deg,#141414 0 50%,#f5f5f2 50% 100%); position:relative; overflow:hidden; border:1px solid var(--line)}
+.meter i{position:absolute; inset:0; background:#808080; opacity:0; transition:opacity .5s}
+.meterlabel{display:flex; justify-content:space-between; font-size:12px; color:var(--sub); margin:4px 0 12px}
+
+.board{
+  --bk:#141414; --wh:#f5f5f2;
+  display:grid; grid-template-columns:repeat(8,1fr); gap:2px;
+  background:var(--grid); padding:6px; border-radius:6px; aspect-ratio:1;
+  box-shadow:0 6px 18px rgba(0,0,0,.18);
+}
+.cell{
+  position:relative; background:var(--board); border:0; padding:0; cursor:pointer;
+  display:flex; align-items:center; justify-content:center; aspect-ratio:1;
+}
+.disc{
+  width:80%; height:80%; border-radius:50%;
+  border:1px solid rgba(0,0,0,.4);
+  box-shadow:0 2px 3px rgba(0,0,0,.35);
+  transition:background-color .6s;
+}
+.disc.b{background:var(--bk)} .disc.w{background:var(--wh)}
+.board.reveal .disc{transition:background-color 1.4s}
+.disc.flip{animation:flip .45s ease}
+.disc.pop{animation:pop .3s ease}
+@keyframes flip{50%{transform:scaleX(.08)}}
+@keyframes pop{from{transform:scale(.3)}}
+.cell.last::after{
+  content:""; position:absolute; width:14%; height:14%; border-radius:50%; background:var(--accent);
+}
+.cell.hint::before{
+  content:""; width:22%; height:22%; border-radius:50%; background:rgba(255,255,255,.28);
+}
+.cell.miss{animation:miss .4s}
+@keyframes miss{0%,100%{background:var(--board)}40%{background:#8a4a3c}}
+
+.msg{min-height:48px; margin:12px 0 6px; text-align:center; font-size:16px; line-height:1.5}
+.msg.warn{color:var(--accent)}
+.foot{display:flex; justify-content:space-between; align-items:center; gap:10px; margin-top:6px}
+.foul{font-size:13px; color:var(--sub)}
+
+.result{border-top:1px solid var(--ink); border-bottom:1px solid var(--ink); padding:16px 0; margin:14px 0; text-align:center}
+.result .win{font-size:26px; font-weight:700; letter-spacing:.1em}
+.result .score{font-size:18px; margin-top:6px}
+h1{cursor:default; user-select:none; -webkit-user-select:none}
+
+/* タイトル横のモード切替石 */
+.titlebar{display:flex; align-items:center; justify-content:center; gap:12px; margin:4px 0 2px}
+.titlebar h1{margin:0; white-space:nowrap}
+/* 「ゲーミングリバーシ」は9文字あるので、画面幅に合わせて文字を縮めて1行に収める */
+body.gaming .titlebar h1{font-size:min(28px, calc((100vw - 140px) / 10.2))}
+.modeStone{
+  width:36px; height:36px; padding:0; border:0; background:none; cursor:pointer;
+  perspective:240px; flex:none; animation:hue 4s linear infinite;
+}
+.stone-inner{
+  display:block; width:100%; height:100%; position:relative;
+  transform-style:preserve-3d; transition:transform .6s cubic-bezier(.4,.2,.2,1.2);
+}
+.modeStone.flipped .stone-inner{transform:rotateY(180deg)}
+.modeStone.right.flipped .stone-inner{transform:rotateY(-180deg)} /* 左右で鏡写しに返る */
+.modeStone:active:not(:disabled) .stone-inner{scale:.92}
+.modeStone:disabled{cursor:default}
+.face{
+  position:absolute; inset:0; border-radius:50%;
+  backface-visibility:hidden; -webkit-backface-visibility:hidden;
+  border:1px solid rgba(0,0,0,.4);
+}
+.face.front{
+  background:radial-gradient(circle at 35% 30%, #c4c4c4, #8a8a8a 55%, #626262);
+  box-shadow:0 2px 4px rgba(0,0,0,.35);
+}
+.face.back{
+  transform:rotateY(180deg);
+  background:conic-gradient(from var(--h, 0deg),#ff004c,#ff8a00,#ffe600,#2bff5a,#00d5ff,#4b5bff,#c03bff,#ff004c);
+  box-shadow:0 0 14px hsl(var(--h, 0deg) 100% 60%);
+}
+
+/* ===== 裏モード: ゲーミング ===== */
+@property --h{syntax:'<angle>'; inherits:true; initial-value:0deg}
+@keyframes hue{to{--h:360deg}}
+@keyframes slide{to{background-position:200% 0}}
+@keyframes boot{0%{filter:brightness(3) saturate(3)}100%{filter:none}}
+.board{--f:0}
+body.gaming{
+  --paper:#07070b; --ink:#ecebff; --sub:#9b98c0; --line:#2b2940; --accent:#ff2bd6;
+  --board:#34315a; --grid:#1c1a2e;
+  font-family:"DotGothic16","Hiragino Kaku Gothic ProN",monospace;
+  animation:boot .6s ease;
+}
+body.gaming h1{
+  background:linear-gradient(90deg,#ff004c,#ff8a00,#ffe600,#2bff5a,#00d5ff,#4b5bff,#c03bff,#ff004c);
+  background-size:200% 100%; -webkit-background-clip:text; background-clip:text; color:transparent;
+  animation:slide 3s linear infinite;
+}
+body.gaming .board{
+  animation:hue 4s linear infinite;
+  background:hsl(var(--h, 0deg) 90% 45% / calc(.25 + var(--f) * .6));
+  box-shadow:0 0 calc(8px + var(--f) * 36px) hsl(var(--h, 0deg) 100% 55% / .75);
+}
+body.gaming .disc{
+  position:relative;
+  box-shadow:0 0 calc(var(--f) * 14px) hsl(var(--h, 0deg) 100% 60%), 0 2px 3px rgba(0,0,0,.5);
+}
+/* 黒石の縁取りとツヤ(虹色が完全に被ると隠れるので白黒の判別材料にはならない) */
+body.gaming .disc{border-color:rgba(255,255,255,.4)}
+body.gaming .disc.b{background-image:radial-gradient(circle at 35% 30%, rgba(255,255,255,.28), transparent 55%)}
+body.gaming .disc::after{
+  content:""; position:absolute; inset:-1px; border-radius:50%;
+  background:conic-gradient(from var(--h, 0deg),#ff004c,#ff8a00,#ffe600,#2bff5a,#00d5ff,#4b5bff,#c03bff,#ff004c);
+  opacity:var(--f); transition:opacity .6s;
+}
+body.gaming .board.reveal .disc::after{transition:opacity 1.4s}
+body.gaming .meter{background:linear-gradient(90deg,#141414 0 50%,#f5f5f2 50% 100%)}
+body.gaming .meter i{
+  background:linear-gradient(90deg,#ff004c,#ff8a00,#ffe600,#2bff5a,#00d5ff,#4b5bff,#c03bff,#ff004c);
+  background-size:200% 100%; animation:slide 2s linear infinite;
+}
+body.gaming .result{border-color:var(--accent)}
+body.gaming .primary{box-shadow:0 0 14px rgba(255,43,214,.45)}
+@media (prefers-reduced-motion:reduce){
+  .disc.flip,.disc.pop,.cell.miss{animation:none}
+  body.gaming .board{animation-duration:30s}
+  body.gaming h1, body.gaming .meter i, body.gaming{animation:none}
+}
+</style>
+</head>
+<body>
+<main>
+  <div class="titlebar">
+    <button class="modeStone" aria-label="ゲーミングモードに切り替え">
+      <span class="stone-inner"><span class="face front"></span><span class="face back"></span></span>
+    </button>
+    <h1 id="title">灰色リバーシ</h1>
+    <button class="modeStone right" aria-label="ゲーミングモードに切り替え">
+      <span class="stone-inner"><span class="face front"></span><span class="face back"></span></span>
+    </button>
+  </div>
+
+  <!-- 設定画面 -->
+  <section id="setup">
+    <p class="lead" id="lead">一手ごとに石の色が薄れ、やがて盤上はすべて灰色に。<br>どの石が自分のものか、覚えていますか。</p>
+
+    <div class="group">
+      <h2 id="grayLabel">完全に灰色になる手数</h2>
+      <div class="seg" data-key="gray">
+        <button data-v="20">20手目</button>
+        <button data-v="30" aria-pressed="true">30手目</button>
+        <button data-v="40">40手目</button>
+      </div>
+    </div>
+    <div class="group">
+      <h2>対戦相手</h2>
+      <div class="seg" data-key="mode">
+        <button data-v="pvp" aria-pressed="true">ふたりで</button>
+        <button data-v="cpu">コンピュータ(白)</button>
+      </div>
+    </div>
+    <div class="group">
+      <h2>置けないマスを選んだら</h2>
+      <div class="seg" data-key="foul">
+        <button data-v="retry" aria-pressed="true">やり直せる</button>
+        <button data-v="lose">手番を失う</button>
+      </div>
+    </div>
+    <div class="group">
+      <h2>置けるマスの表示</h2>
+      <div class="seg" data-key="hint">
+        <button data-v="off" aria-pressed="true">なし</button>
+        <button data-v="on">あり(やさしい)</button>
+      </div>
+    </div>
+    <button class="primary" id="start">対局開始</button>
+  </section>
+
+  <!-- 対局画面 -->
+  <section id="game" class="hidden">
+    <div class="status">
+      <div class="turn"><span class="chip" id="chip"></span><span id="turnText"></span></div>
+      <div class="count" id="count"></div>
+    </div>
+    <div class="meter"><i id="meterFill"></i></div>
+    <div class="meterlabel"><span id="grayText"></span><span id="grayGoal"></span></div>
+
+    <div class="board" id="board"></div>
+
+    <div class="msg" id="msg" aria-live="polite"></div>
+    <div id="result" class="result hidden">
+      <div class="win" id="winText"></div>
+      <div class="score" id="scoreText"></div>
+    </div>
+    <div class="foot">
+      <span class="foul" id="foulText"></span>
+      <span>
+        <button class="ghost" id="reveal">答え合わせ</button>
+        <button class="ghost" id="back">設定へ</button>
+      </span>
+    </div>
+  </section>
+</main>
+
+<script>
+(function(){
+  const $ = id => document.getElementById(id);
+  const opt = {gray:30, mode:'pvp', foul:'retry', hint:'off'};
+  const NAME = {1:'黒', 2:'白'};
+  const DIRS = [[-1,-1],[-1,0],[-1,1],[0,-1],[0,1],[1,-1],[1,0],[1,1]];
+  const WEIGHT = [
+    120,-20,20,5,5,20,-20,120,
+    -20,-40,-5,-5,-5,-5,-40,-20,
+    20,-5,15,3,3,15,-5,20,
+    5,-5,3,3,3,3,-5,5,
+    5,-5,3,3,3,3,-5,5,
+    20,-5,15,3,3,15,-5,20,
+    -20,-40,-5,-5,-5,-5,-40,-20,
+    120,-20,20,5,5,20,-20,120];
+
+  let board, turn, moves, over, busy, fouls, last, cells = [], gameId = 0;
+
+  /* 設定の切り替え */
+  document.querySelectorAll('.seg').forEach(seg=>{
+    seg.addEventListener('click', e=>{
+      const b = e.target.closest('button'); if(!b) return;
+      seg.querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed', x===b));
+      const v = b.dataset.v;
+      opt[seg.dataset.key] = seg.dataset.key==='gray' ? +v : v;
+    });
+  });
+
+  /* 盤の生成 */
+  const boardEl = $('board');
+  for(let i=0;i<64;i++){
+    const c = document.createElement('button');
+    c.className = 'cell';
+    c.setAttribute('aria-label', 'abcdefgh'[i%8] + (Math.floor(i/8)+1));
+    c.addEventListener('click', ()=>tap(i));
+    boardEl.appendChild(c); cells.push(c);
+  }
+
+  function flipsFor(i, p){
+    if(board[i]) return [];
+    const r=Math.floor(i/8), c=i%8, o=3-p, out=[];
+    for(const [dr,dc] of DIRS){
+      const line=[]; let y=r+dr, x=c+dc;
+      while(y>=0&&y<8&&x>=0&&x<8&&board[y*8+x]===o){ line.push(y*8+x); y+=dr; x+=dc; }
+      if(line.length && y>=0&&y<8&&x>=0&&x<8 && board[y*8+x]===p) out.push(...line);
+    }
+    return out;
+  }
+  const legal = p => { const a=[]; for(let i=0;i<64;i++) if(flipsFor(i,p).length) a.push(i); return a; };
+
+  /* 灰色度: 1手目は0、指定の手数で1 */
+  function grayness(){ return over ? 0 : Math.min(1, moves/(opt.gray-1)); }
+  function mix(a,b,f){ return Math.round(a+(b-a)*f); }
+  function paint(){
+    const f = grayness();
+    boardEl.style.setProperty('--f', f);
+    if(gaming){
+      // 石の地色はそのまま、上から同期した虹色が被さっていく
+      boardEl.style.setProperty('--bk', '#141414');
+      boardEl.style.setProperty('--wh', '#f5f5f2');
+    } else {
+      const k = mix(20,128,f), w1 = mix(245,128,f), w2 = mix(242,128,f);
+      boardEl.style.setProperty('--bk', `rgb(${k},${k},${k})`);
+      boardEl.style.setProperty('--wh', `rgb(${w1},${w1},${w2})`);
+    }
+    const word = gaming ? '虹色' : '灰色';
+    $('meterFill').style.opacity = over ? 0 : f;
+    $('grayText').textContent = over ? '色を戻しました' : (f>=1 ? `完全に${word}` : `${word}度 ${Math.round(f*100)}%`);
+    $('grayGoal').textContent = `${opt.gray}手目で完全に${word}`;
+  }
+
+  /* ===== 裏モード ===== */
+  let gaming = false;
+  const TEXT = {
+    normal:{title:'灰色リバーシ', lead:'一手ごとに石の色が薄れ、やがて盤上はすべて灰色に。<br>どの石が自分のものか、覚えていますか。', label:'完全に灰色になる手数'},
+    gaming:{title:'ゲーミングリバーシ', lead:'一手ごとに石が虹色に染まり、やがて盤上はすべて七色に輝く。<br>光の向こうの白と黒、見えていますか。', label:'完全に虹色になる手数'}
+  };
+  function toggleGaming(){
+    gaming = !gaming;
+    document.body.classList.toggle('gaming', gaming);
+    const t = TEXT[gaming ? 'gaming' : 'normal'];
+    $('title').textContent = t.title; document.title = t.title;
+    $('lead').innerHTML = t.lead; $('grayLabel').textContent = t.label;
+    stones.forEach(st=>{
+      st.classList.toggle('flipped', gaming);
+      st.setAttribute('aria-label', gaming ? '灰色リバーシに戻す' : 'ゲーミングモードに切り替え');
+    });
+    if(board) render();
+  }
+  // タイトル横の石: ひっくり返った瞬間にモードが切り替わる
+  const stones = document.querySelectorAll('.modeStone');
+  let flipping = false;
+  stones.forEach(st=>st.addEventListener('click', ()=>{
+    if(flipping) return;
+    flipping = true;
+    stones.forEach(x=>x.classList.toggle('flipped'));
+    setTimeout(()=>{ toggleGaming(); flipping = false; }, 300);
+  }));
+  // 対局中(終局前)はスキンを切り替えない
+  function setPlaying(v){ stones.forEach(st=>st.disabled = v); }
+  // コナミコマンド
+  const KONAMI = ['ArrowUp','ArrowUp','ArrowDown','ArrowDown','ArrowLeft','ArrowRight','ArrowLeft','ArrowRight','b','a'];
+  let kp = 0;
+  document.addEventListener('keydown', e=>{
+    const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+    kp = (k === KONAMI[kp]) ? kp + 1 : (k === KONAMI[0] ? 1 : 0);
+    if(kp === KONAMI.length){ kp = 0; if(!stones[0].disabled) toggleGaming(); }
+  });
+
+  function render(anim){
+    const hints = (!over && opt.hint==='on' && !(opt.mode==='cpu' && turn===2)) ? legal(turn) : [];
+    cells.forEach((c,i)=>{
+      const v = board[i];
+      let d = c.firstChild;
+      if(v){
+        if(!d){ d=document.createElement('span'); c.appendChild(d); }
+        d.className = 'disc ' + (v===1?'b':'w');
+        if(anim){
+          const cls = anim.placed===i ? 'pop' : (anim.flipped.includes(i) ? 'flip' : '');
+          if(cls){ void d.offsetWidth; d.classList.add(cls); } // 連続で返されても毎回アニメーションさせる
+        }
+      } else if(d){ c.removeChild(d); }
+      c.classList.toggle('last', i===last && !over);
+      c.classList.toggle('hint', hints.includes(i));
+    });
+    $('chip').className = 'chip ' + (turn===1?'b':'w');
+    $('turnText').textContent = over ? '終局' : `${NAME[turn]}の番`;
+    $('count').innerHTML = over ? `全${moves}手` : `${moves+1}手目<br>石の数は終局まで秘密`;
+    $('foulText').textContent = (fouls[1]||fouls[2]) ? `お手つき 黒${fouls[1]}・白${fouls[2]}` : '';
+    paint();
+  }
+
+  function say(t, warn){ const m=$('msg'); m.textContent=t; m.classList.toggle('warn', !!warn); }
+
+  function start(){
+    board = new Array(64).fill(0);
+    board[27]=2; board[28]=1; board[35]=1; board[36]=2;
+    turn=1; moves=0; over=false; busy=false; fouls={1:0,2:0}; last=-1; gameId++;
+    boardEl.classList.remove('reveal');
+    $('result').classList.add('hidden');
+    disarm();
+    $('setup').classList.add('hidden'); $('game').classList.remove('hidden');
+    setPlaying(true);
+    say('黒から始めます。');
+    render();
+  }
+
+  function tap(i){
+    if(over || busy || board[i]) return;
+    if(opt.mode==='cpu' && turn===2) return;
+    disarm();
+    const f = flipsFor(i, turn);
+    if(!f.length){
+      fouls[turn]++;
+      cells[i].classList.remove('miss'); void cells[i].offsetWidth; cells[i].classList.add('miss');
+      if(opt.foul==='lose'){
+        const p = turn; turn = 3-turn;
+        next(`${NAME[p]}のお手つき。手番は${NAME[turn]}に移ります。`, true);
+      } else {
+        say('そこには置けません。もう一度。', true);
+        render();
+      }
+      return;
+    }
+    place(i, f);
+  }
+
+  function place(i, f){
+    board[i]=turn; f.forEach(j=>board[j]=turn);
+    last=i; moves++;
+    const p=turn; turn=3-turn;
+    next(`${NAME[p]}が${f.length}枚返しました。`, false, {placed:i, flipped:f});
+  }
+
+  /* 手番を進める(パス・終局の判定) */
+  function next(text, warn, anim){
+    if(!legal(turn).length){
+      if(legal(3-turn).length){
+        text += ` ${NAME[turn]}は置けるマスがなくパス。`;
+        turn = 3-turn;
+      } else { render(anim); return finish(text); }
+    }
+    say(text, warn);
+    render(anim);
+    if(opt.mode==='cpu' && turn===2 && !over){
+      busy=true;
+      const id = gameId;
+      setTimeout(()=>{ if(id!==gameId) return; busy=false; if(!over) cpu(); }, 900);
+    }
+  }
+
+  function cpu(){
+    let best=-1, bs=-1e9;
+    for(const i of legal(2)){
+      const s = WEIGHT[i] + flipsFor(i,2).length + Math.random()*4;
+      if(s>bs){ bs=s; best=i; }
+    }
+    if(best>=0) place(best, flipsFor(best,2));
+  }
+
+  function finish(text){
+    over=true; setPlaying(false);
+    boardEl.classList.add('reveal');
+    const b = board.filter(v=>v===1).length, w = board.filter(v=>v===2).length;
+    $('winText').textContent = b===w ? '引き分け' : `${b>w?'黒':'白'}の勝ち`;
+    $('scoreText').textContent = `黒 ${b} ― 白 ${w}`;
+    $('result').classList.remove('hidden');
+    say(text || '');
+    render();
+  }
+
+  /* 答え合わせは2度押しで確定 */
+  const rev = $('reveal'); let armed=false;
+  function disarm(){ armed=false; rev.classList.remove('armed'); rev.textContent='答え合わせ'; }
+  rev.addEventListener('click', ()=>{
+    if(over) return;
+    if(!armed){ armed=true; rev.classList.add('armed'); rev.textContent='もう一度押すと終了'; return; }
+    disarm(); finish('ここで対局を終え、色を戻しました。');
+  });
+
+  $('start').addEventListener('click', start);
+  $('back').addEventListener('click', ()=>{
+    over=true; setPlaying(false);
+    $('game').classList.add('hidden'); $('setup').classList.remove('hidden');
+  });
+})();
+</script>
+</body>
+</html>
